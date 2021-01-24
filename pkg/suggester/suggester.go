@@ -3,11 +3,14 @@ package suggester
 import (
 	"fmt"
 	"strings"
+	"sync"
 )
 
 // Suggester represents a sug suggestion finder
 type Suggester struct {
-	tlds map[string]bool
+	tlds        map[string]bool
+	wg          *sync.WaitGroup
+	suggestions sync.Map
 
 	// options
 	withList []string
@@ -17,6 +20,7 @@ type Suggester struct {
 func New(opts ...Option) *Suggester {
 	sug := Suggester{
 		tlds:     map[string]bool{},
+		wg:       &sync.WaitGroup{},
 		withList: defaultTLDs[:],
 	}
 
@@ -46,27 +50,47 @@ func (sug *Suggester) init() {
 // Suggest returns potential domains for the given input
 // Output is a map where keys are potential tlds and values are the full potential domain name
 func (sug *Suggester) Suggest(input ...string) (map[string]string, error) {
-	suggestions := make(map[string]string)
+	sug.suggestions = sync.Map{}
+
 	for _, in := range input {
-		if len(in) < 4 {
-			continue
-		}
-
-		tld := strings.ToLower(in)
-		tld = in[len(in)-2:]
-		secondaryLevel := in[:len(in)-len(tld)]
-		for len(secondaryLevel) >= 2 {
-			if sug.isExistingTLD(tld) {
-				suggestions[tld] = fmt.Sprintf("%s.%s", secondaryLevel, tld)
-			}
-
-			tld = in[len(in)-(len(tld)+1):]
-			secondaryLevel = in[:len(in)-len(tld)]
-		}
-
+		sug.wg.Add(1)
+		go sug.processSingleInput(in)
 	}
 
-	return suggestions, nil
+	sug.wg.Wait()
+
+	result := make(map[string]string)
+	sug.suggestions.Range(func(key, value interface{}) bool {
+		tld := key.(string)
+		domain := value.(string)
+		result[tld] = domain
+
+		return true
+	})
+
+	return result, nil
+}
+
+func (sug *Suggester) processSingleInput(input string) {
+	defer sug.wg.Done()
+
+	if len(input) < 4 {
+		// skip when domain is invalid due to minimal legnth
+		return
+	}
+
+	input = strings.ToLower(input)
+	tld := input[len(input)-2:]
+	secondaryLevel := input[:len(input)-len(tld)]
+
+	for len(secondaryLevel) >= 2 {
+		if sug.isExistingTLD(tld) {
+			sug.suggestions.Store(tld, fmt.Sprintf("%s.%s", secondaryLevel, tld))
+		}
+
+		tld = input[len(input)-(len(tld)+1):]
+		secondaryLevel = input[:len(input)-len(tld)]
+	}
 }
 
 func (sug *Suggester) isExistingTLD(potentialTLD string) bool {
