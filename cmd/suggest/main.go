@@ -18,7 +18,7 @@ func main() {
 	}
 
 	suggester := suggester.New()
-	domains, err := suggester.Suggest(input)
+	domains, err := suggester.Suggest(input...)
 	if err != nil {
 		fmt.Println(errors.Wrap(err, "Execution Failed"))
 		os.Exit(1)
@@ -29,14 +29,11 @@ func main() {
 	fmt.Printf("Potential domains for the given input: \n%s\n", output)
 }
 
-func parse() (string, error) {
+func parse() ([]string, error) {
 	if len(os.Args) == 1 {
-		return "", errors.New("Missing command line argument as input")
+		return nil, errors.New("Missing command line argument as input")
 	}
-	if len(os.Args) > 2 {
-		return "", errors.New("Too many command line argument")
-	}
-	return os.Args[1], nil
+	return os.Args[1:], nil
 }
 
 func getSafeOutput(domains map[string]string) string {
