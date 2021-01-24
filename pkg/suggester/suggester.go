@@ -3,12 +3,11 @@ package suggester
 import (
 	"fmt"
 	"strings"
-	"sync"
 )
 
 // Suggester represents a sug suggestion finder
 type Suggester struct {
-	tlds sync.Map
+	tlds map[string]bool
 
 	// options
 	withList []string
@@ -17,7 +16,7 @@ type Suggester struct {
 // New initiates a new Suggester
 func New(opts ...Option) *Suggester {
 	sug := Suggester{
-		tlds:     sync.Map{},
+		tlds:     map[string]bool{},
 		withList: defaultTLDs[:],
 	}
 
@@ -40,7 +39,7 @@ func (sug *Suggester) init() {
 		if skipTLD(tld) {
 			continue
 		}
-		sug.tlds.Store(string(tld), true)
+		sug.tlds[tld] = true
 	}
 }
 
@@ -71,7 +70,7 @@ func (sug *Suggester) Suggest(input ...string) (map[string]string, error) {
 }
 
 func (sug *Suggester) isExistingTLD(potentialTLD string) bool {
-	_, ok := sug.tlds.Load(potentialTLD)
+	_, ok := sug.tlds[potentialTLD]
 	return ok
 }
 
