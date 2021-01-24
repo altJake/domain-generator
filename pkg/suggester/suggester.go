@@ -1,9 +1,7 @@
 package suggester
 
 import (
-	"bytes"
 	"fmt"
-	"io/ioutil"
 	"strings"
 	"sync"
 
@@ -13,41 +11,39 @@ import (
 // Suggester represents a sug suggestion finder
 type Suggester struct {
 	tlds sync.Map
+
+	// options
+	withList []string
 }
 
 // New initiates a new Suggester
-func New() *Suggester {
+func New(opts ...Option) *Suggester {
 	sug := Suggester{
-		tlds: sync.Map{},
+		tlds:     sync.Map{},
+		withList: defaultTLDs[:],
 	}
 
-	err := sug.load()
-	if err != nil {
-		panic(errors.Wrap(err, "Failed to load domains"))
-	}
+	sug.Options(opts...)
+	sug.init()
 
 	return &sug
 }
 
-func (sug *Suggester) load() error {
-	var err error
-	filePath := getFilePath()
-
-	dat, err := ioutil.ReadFile(filePath)
-	if err != nil {
-		return err
+// Options applies the given opts onto Suggester
+func (sug *Suggester) Options(opts ...Option) {
+	for _, opt := range opts {
+		opt(sug)
 	}
+}
 
-	splits := bytes.Split(dat, []byte("\n"))
-	for _, tld := range splits {
-		tld = bytes.ToLower(tld)
-		if invalidValidTLDFileLine(tld) {
+func (sug *Suggester) init() {
+	for _, tld := range sug.withList {
+		tld = strings.ToLower(tld)
+		if skipTLD(tld) {
 			continue
 		}
 		sug.tlds.Store(string(tld), true)
 	}
-
-	return nil
 }
 
 // Suggest returns potential domains for the given input
@@ -77,4 +73,19 @@ func (sug *Suggester) Suggest(input string) (map[string]string, error) {
 func (sug *Suggester) isExistingTLD(potentialTLD string) bool {
 	_, ok := sug.tlds.Load(potentialTLD)
 	return ok
+}
+
+// Option is a type for Suggester Options
+type Option func(sug *Suggester)
+
+// OptionWithList allows specifying a list for suggestions overriding the default TLDs list
+func OptionWithList(list []string) Option {
+	return func(sug *Suggester) {
+		sug.withList = list
+	}
+}
+
+func skipTLD(tld string) bool {
+	// filtering xn--??? TLD
+	return strings.HasPrefix(tld, "xn--")
 }
